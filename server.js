@@ -36,28 +36,28 @@ app.post('/api/storyboard-image',async(req,res)=>{
  res.json({imageUrl});
 });
 
-// Free hosted LTX-Video via public Hugging Face Gradio Space (shared ZeroGPU).
+// Reinitialized free LTX video integration via Hugging Face Gradio API.
 app.post('/api/free-video',async(req,res)=>{
  const {prompt,style='Cinematic',ratio='1280:720',duration=5}=req.body||{};
  if(typeof prompt!=='string'||prompt.trim().length<3)return res.status(400).json({error:'Please enter a video description.'});
  if(prompt.length>900)return res.status(400).json({error:'Prompt too long.'});
  const [width,height]=ratio.split(':').map(Number);
+ if(![1280,720,960].includes(width)||![720,1280,960].includes(height))return res.status(400).json({error:'Invalid video dimensions.'});
  const seconds=Math.min(8.5,Math.max(3,Number(duration)||5));
  const data=[`Visual style: ${style}. ${prompt.trim()}. No watermark, no logo, no text overlay.`,'worst quality, blurry, distorted, watermark, logo, text overlay',null,null,height,width,'text-to-video',7,seconds,0,42,true,1,true];
- const headers={'Content-Type':'application/json'};
- if(process.env.HF_TOKEN)headers.Authorization='Bearer '+process.env.HF_TOKEN;
+ const headers={'Content-Type':'application/json'};if(process.env.HF_TOKEN)headers.Authorization='Bearer '+process.env.HF_TOKEN;
+ const base='https://lightricks-ltx-video-distilled.hf.space';
  try{
-  const base='https://lightricks-ltx-video-distilled.hf.space';
-  const submit=await fetch(base+'/gradio_api/call/text_to_video',{method:'POST',headers,body:JSON.stringify({data})});
-  if(!submit.ok)return res.status(502).json({error:'Free model submission failed. The public model may be busy.'});
-  const {event_id}=await submit.json();if(!event_id)return res.status(502).json({error:'Free model did not return a task ID.'});
-  const result=await fetch(base+'/gradio_api/call/text_to_video/'+event_id,{headers,signal:AbortSignal.timeout(300000)});
-  if(!result.ok)return res.status(502).json({error:'Free model render failed while waiting for output.'});
-  const raw=await result.text();
-  const blocks=raw.split(/\n\n/).filter(Boolean).reverse();
-  for(const block of blocks){const ev=block.match(/^event:\s*(\S+)/m),dm=block.match(/^data:\s*(.+)$/m);if(!ev||!dm)continue;if(ev[1]==='error')return res.status(502).json({error:'Free model generation failed. Try again later.'});if(ev[1]==='complete'){const payload=JSON.parse(dm[1]);const vf=payload?.[0];const url=vf?.video?.url||vf?.url||vf?.path;if(url)return res.json({videoUrl:url,free:true});}}
-  return res.status(502).json({error:'Free model finished without a usable video URL.'});
- }catch(e){return res.status(502).json({error:e.name==='TimeoutError'?'Free model timed out. Try again.':'Free model is temporarily unavailable. Try again later.'});}
+  const submit=await fetch(base+'/gradio_api/call/text_to_video',{method:'POST',headers,body:JSON.stringify({data}),signal:AbortSignal.timeout(45000)});
+  const submitText=await submit.text();if(!submit.ok){console.error('Free engine submit error',submit.status,submitText.slice(0,500));return res.status(502).json({error:'Free engine rejected submission ('+submit.status+'). Try again shortly.'});}
+  let parsed;try{parsed=JSON.parse(submitText);}catch{console.error('Free engine submit malformed response',submitText.slice(0,500));return res.status(502).json({error:'Free engine returned an invalid task response.'});}
+  const eventId=parsed.event_id;if(!eventId)return res.status(502).json({error:'Free engine did not return a task ID.'});
+  const result=await fetch(base+'/gradio_api/call/text_to_video/'+encodeURIComponent(eventId),{headers,signal:AbortSignal.timeout(240000)});
+  const raw=await result.text();if(!result.ok){console.error('Free engine wait error',result.status,raw.slice(0,500));return res.status(502).json({error:'Free engine could not retrieve render ('+result.status+').'});}
+  const blocks=raw.split(/\n\n/).filter(Boolean);let output=null,detail='';
+  for(const block of blocks){const ev=block.match(/^event:\s*(\S+)/m),dm=block.match(/^data:\s*(.+)$/m);if(!ev||!dm)continue;if(ev[1]==='error'){detail=dm[1];break;}if(ev[1]==='complete'){try{const payload=JSON.parse(dm[1]);const vf=payload?.[0];output=vf?.video?.url||vf?.url||vf?.path||null;}catch(e){detail=e.message;}break;}}
+  if(output)return res.json({videoUrl:output,free:true});console.error('Free engine completed without output',detail,raw.slice(-1000));return res.status(502).json({error:'Free engine did not return a video. The hosted model may be unavailable or busy.'});
+ }catch(e){console.error('Free engine exception',e.name,e.message);return res.status(502).json({error:e.name==='TimeoutError'?'Free engine timed out. Try again.':'Free engine connection failed. Try again later.'});}
 });
 
 app.get('/api/task/:id',async(req,res)=>{
