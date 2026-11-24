@@ -27,7 +27,7 @@ app.post('/api/storyboard-image',async(req,res)=>{
    const state=await check.json().catch(()=>({}));
    if(!check.ok)return res.status(502).json({error:'Stable Horde status check failed. Try another picture engine.'});
    const generated=state.generations?.[0]?.img;
-   if(generated)return res.json({imageUrl:'data:image/webp;base64,'+generated,engine:'stable-horde'});
+   if(generated)return res.json({imageUrl:'data:image/png;base64,'+generated,engine:'stable-horde'});
    if(state.faulted)return res.status(502).json({error:'Stable Horde could not generate this picture. Try Pollinations.'});
   }
   return res.status(504).json({error:'Stable Horde is busy and the picture is taking too long. Switch to Pollinations or retry.'});
