@@ -15,7 +15,7 @@ app.post('/api/generate', async (req,res)=>{
  if(!['1280:720','720:1280','960:960'].includes(ratio)) return res.status(400).json({error:'Unsupported video aspect ratio.'});
  if(!['gen4_turbo','gen4.5','seedance2_5'].includes(model)) return res.status(400).json({error:'Unsupported model.'});
  try {
-  const payload={model,promptText:`Visual style: ${style}. ${prompt.trim()}`,duration:Number(duration),ratio};
+  const payload={model,promptText:`Visual style: ${style}. ${prompt.trim()}. No watermark, no logo, no text overlay.`,duration:Number(duration),ratio};
   const r=await fetch(API+'/text_to_video',{method:'POST',headers:{Authorization:`Bearer ${KEY}`,'X-Runway-Version':VERSION,'Content-Type':'application/json'},body:JSON.stringify(payload)});
   const data=await r.json().catch(()=>({}));
   if(!r.ok)return res.status(r.status).json({error:data?.error||data?.message||'Runway rejected the request. Check API credits and model options.'});
@@ -30,7 +30,7 @@ app.post('/api/free-video',async(req,res)=>{
  if(prompt.length>900)return res.status(400).json({error:'Prompt too long.'});
  const [width,height]=ratio.split(':').map(Number);
  const seconds=Math.min(8.5,Math.max(3,Number(duration)||5));
- const data=[`Visual style: ${style}. ${prompt.trim()}`,'worst quality, blurry, distorted, watermark','','',height,width,'text-to-video',seconds,9,42,true,1,true];
+ const data=[`Visual style: ${style}. ${prompt.trim()}. No watermark, no logo, no text overlay.`,'worst quality, blurry, distorted, watermark, logo, text overlay','','',height,width,'text-to-video',seconds,9,42,true,1,true];
  const headers={'Content-Type':'application/json'};
  if(process.env.HF_TOKEN)headers.Authorization='Bearer '+process.env.HF_TOKEN;
  try{
