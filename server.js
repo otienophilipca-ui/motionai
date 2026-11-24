@@ -43,7 +43,7 @@ app.post('/api/free-video',async(req,res)=>{
  if(prompt.length>900)return res.status(400).json({error:'Prompt too long.'});
  const [width,height]=ratio.split(':').map(Number);
  const seconds=Math.min(8.5,Math.max(3,Number(duration)||5));
- const data=[`Visual style: ${style}. ${prompt.trim()}. No watermark, no logo, no text overlay.`,'worst quality, blurry, distorted, watermark, logo, text overlay',null,null,height,width,'text-to-video',seconds,0,42,true,1,true];
+ const data=[`Visual style: ${style}. ${prompt.trim()}. No watermark, no logo, no text overlay.`,'worst quality, blurry, distorted, watermark, logo, text overlay',null,null,height,width,'text-to-video',7,seconds,0,42,true,1,true];
  const headers={'Content-Type':'application/json'};
  if(process.env.HF_TOKEN)headers.Authorization='Bearer '+process.env.HF_TOKEN;
  try{
