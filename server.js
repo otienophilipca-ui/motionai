@@ -23,7 +23,7 @@ app.post('/api/generate', async (req,res)=>{
  } catch(e){res.status(502).json({error:'Could not reach the video provider. Please retry.'});}
 });
 
-// Free hosted LTX-Video via public Hugging Face Gradio Space (shared ZeroGPU).
+// Lightweight storyboard still-image endpoint: generate visual thumbnails using remote image prompt service.\napp.post('/api/storyboard-image',async(req,res)=>{\n const {prompt,style='Cinematic'}=req.body||{};\n if(typeof prompt!=='string'||prompt.trim().length<3)return res.status(400).json({error:'Provide a scene description.'});\n // Use a public image endpoint only as a thumbnail preview; prompt is encoded for URL safety.\n const imageUrl='https://image.pollinations.ai/prompt/'+encodeURIComponent(style+' storyboard frame, scene illustration: '+prompt.trim()+' no text, no watermark');\n res.json({imageUrl});\n});\n\n// Free hosted LTX-Video via public Hugging Face Gradio Space (shared ZeroGPU).
 app.post('/api/free-video',async(req,res)=>{
  const {prompt,style='Cinematic',ratio='1280:720',duration=5}=req.body||{};
  if(typeof prompt!=='string'||prompt.trim().length<3)return res.status(400).json({error:'Please enter a video description.'});
