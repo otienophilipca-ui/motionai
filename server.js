@@ -86,4 +86,61 @@ app.post('/api/wan-video',async(req,res)=>{
 app.post('/api/generate',async(req,res)=>{if(!KEY)return res.status(503).json({error:'Runway is not configured. Add RUNWAY_API_KEY in Render environment settings.'});const {prompt,style='Cinematic',duration=5,ratio='1280:720',model='gen4_turbo'}=req.body||{};if(!validatePrompt(prompt))return res.status(400).json({error:'Prompt must contain 3–900 characters.'});if(![5,10].includes(Number(duration)))return res.status(400).json({error:'Clip duration must be 5 or 10 seconds.'});if(!['1280:720','720:1280','960:960'].includes(ratio))return res.status(400).json({error:'Unsupported aspect ratio.'});if(!['gen4_turbo','gen4.5','seedance2_5'].includes(model))return res.status(400).json({error:'Unsupported video model.'});try{const response=await fetch(API+'/text_to_video',{method:'POST',headers:{Authorization:'Bearer '+KEY,'X-Runway-Version':VERSION,'Content-Type':'application/json'},body:JSON.stringify({model,promptText:'Visual style: '+style+'. '+prompt.trim()+'. No watermark, no logo, no text overlay.',duration:Number(duration),ratio}),signal:AbortSignal.timeout(45000)});const data=await response.json().catch(()=>({}));if(!response.ok)return res.status(response.status).json({error:data.error||data.message||'Runway rejected the request. Check API access and credits.'});res.json({taskId:data.id||data.taskId});}catch(error){console.error('Runway submit:',error.message);res.status(502).json({error:'Could not reach Runway. Please retry.'});}});
 app.get('/api/task/:id',async(req,res)=>{if(!KEY)return res.status(503).json({error:'Runway is not configured.'});try{const response=await fetch(API+'/tasks/'+encodeURIComponent(req.params.id),{headers:{Authorization:'Bearer '+KEY,'X-Runway-Version':VERSION},signal:AbortSignal.timeout(20000)});const data=await response.json().catch(()=>({}));if(!response.ok)return res.status(response.status).json({error:data.error||data.message||'Task status unavailable.'});res.json(data);}catch(error){res.status(502).json({error:'Could not check video status.'});}});
 app.post('/api/free-video',async(req,res)=>{const {prompt,style='Cinematic',ratio='1280:720',duration=5}=req.body||{};if(!validatePrompt(prompt))return res.status(400).json({error:'Prompt must contain 3–900 characters.'});if(!['1280:720','720:1280','960:960'].includes(ratio))return res.status(400).json({error:'Unsupported aspect ratio.'});if(![5,10].includes(Number(duration)))return res.status(400).json({error:'Clip duration must be 5 or 10 seconds.'});const [width,height]=ratio.split(':').map(Number);const seconds=Math.min(8.5,Math.max(3,Number(duration)||5));const data=['Visual style: '+style+'. '+prompt.trim()+'. No watermark, no logo, no text overlay.','worst quality, blurry, distorted, watermark, logo, text overlay',null,null,height,width,'text-to-video',7,seconds,0,42,true,1,true];const headers={'Content-Type':'application/json'};if(process.env.HF_TOKEN)headers.Authorization='Bearer '+process.env.HF_TOKEN;const base='https://lightricks-ltx-video-distilled.hf.space';try{const submit=await fetch(base+'/gradio_api/call/text_to_video',{method:'POST',headers,body:JSON.stringify({data}),signal:AbortSignal.timeout(45000)});const raw=await submit.text();if(!submit.ok){console.error('LTX submit',submit.status,raw.slice(0,400));return res.status(502).json({error:'Free video engine rejected the request ('+submit.status+'). Try again later.'});}let task;try{task=JSON.parse(raw);}catch{return res.status(502).json({error:'Free engine returned an invalid response.'});}if(!task.event_id)return res.status(502).json({error:'Free engine did not provide a task ID.'});const result=await fetch(base+'/gradio_api/call/text_to_video/'+encodeURIComponent(task.event_id),{headers,signal:AbortSignal.timeout(240000)});const events=await result.text();if(!result.ok)return res.status(502).json({error:'Free engine could not retrieve the result ('+result.status+').'});let videoUrl=null;for(const block of events.split(/\n\n/)){const event=block.match(/^event:\s*(\S+)/m),match=block.match(/^data:\s*(.+)$/m);if(!event||!match)continue;if(event[1]==='error')return res.status(502).json({error:'Free engine reported a rendering error.'});if(event[1]==='complete'){try{const payload=JSON.parse(match[1]);const file=payload?.[0];videoUrl=file?.video?.url||file?.url||file?.path||null;}catch{}break;}}if(!videoUrl)return res.status(502).json({error:'The free model did not return a video. It may be busy or unavailable.'});res.json({videoUrl,free:true});}catch(error){console.error('LTX render:',error.name,error.message);res.status(502).json({error:error.name==='TimeoutError'?'Free video engine timed out. Try again.':'Could not connect to the free video engine.'});}});
+
+app.post('/api/narration-audio',async(req,res)=>{
+ const {text}=req.body||{};
+ if(typeof text!=='string'||!text.trim()||text.length>12000)return res.status(400).json({error:'Narration must contain 1–12,000 characters.'});
+ const base='https://kinabraytan-kokoro-tts-server.hf.space';
+ try{
+  const submit=await fetch(base+'/gradio_api/call/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:[text.trim(),'af_sarah',1]}),signal:AbortSignal.timeout(45000)});
+  const task=await submit.json().catch(()=>({}));
+  if(!submit.ok||!task.event_id)return res.status(502).json({error:'The free Kokoro voice service is busy. Please retry.'});
+  const result=await fetch(base+'/gradio_api/call/predict/'+encodeURIComponent(task.event_id),{signal:AbortSignal.timeout(240000)});
+  const events=await result.text();
+  if(!result.ok)return res.status(502).json({error:'The voice service could not finish the narration.'});
+  let audioFile=null;
+  for(const block of events.split(/\n\n/)){
+   const ev=block.match(/^event:\s*(\S+)/m),data=block.match(/^data:\s*(.+)$/m);
+   if(!ev||!data)continue;
+   if(ev[1]==='error')return res.status(502).json({error:'Kokoro could not synthesize this narration. Try again.'});
+   if(ev[1]==='complete'){try{const parsed=JSON.parse(data[1]);audioFile=Array.isArray(parsed)?parsed[0]:parsed;}catch{}break;}
+  }
+  let fileUrl=typeof audioFile==='string'?(audioFile.startsWith('http')?audioFile:base+'/gradio_api/file='+audioFile):(audioFile?.url||(audioFile?.path?base+'/gradio_api/file='+audioFile.path:null));
+  if(!fileUrl)return res.status(502).json({error:'The voice service returned no audio file.'});
+  const audio=await fetch(fileUrl,{signal:AbortSignal.timeout(45000)});
+  if(!audio.ok)return res.status(502).json({error:'Could not download the generated narration audio.'});
+  const wav=Buffer.from(await audio.arrayBuffer());
+  const lameModule=await import('lamejs');
+  const lame=lameModule.default||lameModule;
+  const mp3=wavToMp3(wav,lame);
+  res.setHeader('Content-Type','audio/mpeg');
+  res.setHeader('Content-Disposition','attachment; filename="dreammotion-full-narration.mp3"');
+  res.setHeader('Cache-Control','no-store');
+  res.send(mp3);
+ }catch(error){
+  console.error('Kokoro narration:',error.name,error.message);
+  res.status(502).json({error:error.name==='TimeoutError'?'Narration generation timed out. Try a shorter script or retry.':'The free narration service is temporarily unavailable.'});
+ }
+});
+function wavToMp3(wav,lame){
+ if(wav.toString('ascii',0,4)!=='RIFF'||wav.toString('ascii',8,12)!=='WAVE')throw new Error('TTS provider returned an unsupported audio format.');
+ let offset=12,channels=1,sampleRate=24000,bits=16,dataOffset=-1,dataSize=0,format=1;
+ while(offset+8<=wav.length){
+  const id=wav.toString('ascii',offset,offset+4),size=wav.readUInt32LE(offset+4),start=offset+8;
+  if(id==='fmt '&&size>=16){format=wav.readUInt16LE(start);channels=wav.readUInt16LE(start+2);sampleRate=wav.readUInt32LE(start+4);bits=wav.readUInt16LE(start+14);}
+  if(id==='data'){dataOffset=start;dataSize=Math.min(size,wav.length-start);break;}
+  offset=start+size+(size%2);
+ }
+ if(format!==1||bits!==16||dataOffset<0)throw new Error('TTS audio is not 16-bit PCM WAV.');
+ const total=Math.floor(dataSize/(channels*2)),encoder=new lame.Mp3Encoder(channels,sampleRate,128),chunks=[];
+ for(let i=0;i<total;i+=1152){
+  const count=Math.min(1152,total-i),left=new Int16Array(count),right=channels>1?new Int16Array(count):null;
+  for(let j=0;j<count;j++){const pos=dataOffset+(i+j)*channels*2;left[j]=wav.readInt16LE(pos);if(right)right[j]=wav.readInt16LE(pos+2);}
+  const chunk=right?encoder.encodeBuffer(left,right):encoder.encodeBuffer(left);
+  if(chunk.length)chunks.push(Buffer.from(chunk));
+ }
+ const tail=encoder.flush();if(tail.length)chunks.push(Buffer.from(tail));
+ return Buffer.concat(chunks);
+}
+
 const port=process.env.PORT||3000;app.listen(port,()=>console.log('DreamMotion Studio listening on '+port));
