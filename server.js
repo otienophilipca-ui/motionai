@@ -6,7 +6,7 @@ const KEY=process.env.RUNWAY_API_KEY;
 const VERSION='2024-11-06';
 const API='https://api.dev.runwayml.com/v1';
 app.use(express.static('public'));
-app.get('/api/health',(_,res)=>res.json({ok:true,runway:!!KEY,free:true,images:['pollinations','stable-horde']}));
+app.get('/api/health',(_,res)=>res.json({ok:true,runway:!!KEY,free:true,images:['pollinations','stable-horde'],video:['ltx','wan-2.2'],narration:['browser-speech','kokoro-mp3']}));
 function validatePrompt(prompt){return typeof prompt==='string'&&prompt.trim().length>=3&&prompt.length<=900;}
 app.post('/api/storyboard-image',async(req,res)=>{
  const {prompt,style='Cinematic',engine='pollinations'}=req.body||{};
