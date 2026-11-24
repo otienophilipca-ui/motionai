@@ -107,6 +107,7 @@ app.post('/api/narration-audio',async(req,res)=>{
   }
   let fileUrl=typeof audioFile==='string'?(audioFile.startsWith('http')?audioFile:base+'/gradio_api/file='+audioFile):(audioFile?.url||(audioFile?.path?base+'/gradio_api/file='+audioFile.path:null));
   if(!fileUrl)return res.status(502).json({error:'The voice service returned no audio file.'});
+  if(fileUrl.startsWith('/'))fileUrl=base+fileUrl;
   const audio=await fetch(fileUrl,{signal:AbortSignal.timeout(45000)});
   if(!audio.ok)return res.status(502).json({error:'Could not download the generated narration audio.'});
   const wav=Buffer.from(await audio.arrayBuffer());
