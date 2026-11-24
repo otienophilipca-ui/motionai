@@ -41,8 +41,8 @@ app.post('/api/free-video',async(req,res)=>{
   const result=await fetch(base+'/gradio_api/call/text_to_video/'+event_id,{headers,signal:AbortSignal.timeout(300000)});
   if(!result.ok)return res.status(502).json({error:'Free model render failed while waiting for output.'});
   const raw=await result.text();
-  const blocks=raw.split('\\n\\n').filter(Boolean).reverse();
-  for(const block of blocks){const ev=block.match(/^event:\\s*(\\S+)/m),dm=block.match(/^data:\\s*(.+)$/m);if(!ev||!dm)continue;if(ev[1]==='error')return res.status(502).json({error:'Free model generation failed. Try again later.'});if(ev[1]==='complete'){const payload=JSON.parse(dm[1]);const vf=payload?.[0];const url=vf?.video?.url||vf?.url||vf?.path;if(url)return res.json({videoUrl:url,free:true});}}
+  const blocks=raw.split(/\n\n/).filter(Boolean).reverse();
+  for(const block of blocks){const ev=block.match(/^event:\s*(\S+)/m),dm=block.match(/^data:\s*(.+)$/m);if(!ev||!dm)continue;if(ev[1]==='error')return res.status(502).json({error:'Free model generation failed. Try again later.'});if(ev[1]==='complete'){const payload=JSON.parse(dm[1]);const vf=payload?.[0];const url=vf?.video?.url||vf?.url||vf?.path;if(url)return res.json({videoUrl:url,free:true});}}
   return res.status(502).json({error:'Free model finished without a usable video URL.'});
  }catch(e){return res.status(502).json({error:e.name==='TimeoutError'?'Free model timed out. Try again.':'Free model is temporarily unavailable. Try again later.'});}
 });
