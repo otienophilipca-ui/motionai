@@ -1,6 +1,10 @@
 import express from 'express';
 const app = express();
 app.use(express.json({limit:'1mb'}));
+app.use((req,res,next)=>{
+ res.setHeader('Strict-Transport-Security','max-age=63072000; includeSubDomains');
+ next();
+});
 const KEY = process.env.RUNWAY_API_KEY;
 const VERSION = '2024-11-06';
 const API = 'https://api.dev.runwayml.com/v1';
