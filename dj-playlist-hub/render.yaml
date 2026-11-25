@@ -1,1 +1,10 @@
-services:\n  - type: web\n    name: dj-playlist-hub\n    runtime: node\n    plan: free\n    region: singapore\n    rootDir: dj-playlist-hub\n    buildCommand: npm install\n    startCommand: npm start\n    autoDeploy: true\n
+services:
+  - type: web
+    name: dj-playlist-hub
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: dj-playlist-hub
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeploy: true
