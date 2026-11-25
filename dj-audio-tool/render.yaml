@@ -1,0 +1,1 @@
+services:\n  - type: web\n    name: dj-audio-tool\n    runtime: node\n    rootDir: dj-audio-tool\n    buildCommand: npm install\n    startCommand: npm start\n    plan: free\n    autoDeploy: true
